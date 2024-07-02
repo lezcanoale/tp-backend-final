@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generar Reserva</title>
+</head>
+<body>
+    <h1>Buscar Mesa</h1>
+
+    <label for="id_restaurante">Restaurante:</label>
+    <select id="id_restaurante" name="id_restaurante" required>
+        <!-- Las opciones de restaurante se agregarán dinámicamente -->
+    </select>
+    <br><br>
+
+    <button onclick="buscarMesas()">Buscar Mesas Disponibles</button>
+
+    <div id="mesasDisponibles">
+        <!-- Aquí se mostrarán las mesas disponibles -->
+    </div>
+
+    <br><br>
+    <div id="formularioReserva" style="display: none;">
+        <h2>Generar detalles de la Mesa</h2>
+        <form id="reservaForm">
+            <label for="id_producto">ID del Producto:</label>
+            <input type="text" id="id_producto" name="id_producto" required>
+            <br><br>
+            <label for="cantidad">Cantidad:</label>
+            <input type="number" id="cantidad" name="cantidad" required>
+            <br><br>
+            <input type="submit" value="Generar detalle">
+        </form>
+        <hr>
+        <br>
+        <button onclick="crearConsumo()">Generar consumo</button>
+    </div>
+
+    <h2>Consumos de la Mesa</h2>
+    <table id="tablaConsumos">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Fecha Creación</th>
+                <th>Hora Creación</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Aquí se mostrarán los consumos de la mesa seleccionada -->
+           
+              <tr>
+                <td><%= consumo.id %></td>
+                <td><%= consumo.fechaCreacion %></td>
+                <td><%= consumo.horaCreacion %></td>
+                <td><%= consumo.total %></td>
+                <td><%= consumo.estado %></td>
+                <td>
+                    <% if (consumo.estado !== 'Cerrado') { %>
+                        <button onclick="cerrarEstadoConsumo('<%= consumo.id %>')">Cerrar Estado</button>
+                    <% } %>
+                </td>
+                <td>
+                    <% if (consumo.estado === 'Cerrado') { %>
+                        <button onclick="generarPDF('<%= consumo.id %>')">Generar PDF</button>
+                    <% } %>
+                </td>
+
+              </tr>
+      
+        </tbody>
+    </table>
+
+    <script>
+        let mesaSeleccionada = null;
+        let detallesConsumoId = null;
+
+        async function cargarRestaurantes() {
+            try {
+                const response = await fetch("http://localhost:3000/api/restaurantes");
+                const data = await response.json();
+
+                const selectRestaurante = document.getElementById("id_restaurante");
+
+                data.data.forEach(restaurante => {
+                    const option = document.createElement("option");
+                    option.value = restaurante.id;
+                    option.textContent = restaurante.nombre;
+                    selectRestaurante.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error al cargar los restaurantes:", error);
+                alert("Ocurrió un error al cargar los restaurantes");
+            }
+        }
+
+        async function buscarMesas() {
+            const idRestaurante = document.getElementById("id_restaurante").value;
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/mesas/restaurante/${idRestaurante}`);
+                const data = await response.json();
+
+                const mesasDisponibles = document.getElementById("mesasDisponibles");
+                mesasDisponibles.innerHTML = "";
+
+                const listaMesas = document.createElement("ul");
+                listaMesas.style.listStyleType = "none";
+
+                data.data.forEach(mesa => {
+                    const radio = document.createElement("input");
+                    radio.type = "radio";
+                    radio.name = "mesa";
+                    radio.value = mesa.id;
+                    radio.addEventListener("change", function () {
+                        mesaSeleccionada = this.value;
+                        if (!mesa.ocupado) {
+                            document.getElementById("formularioReserva").style.display = "block";
+                        } else {
+                            document.getElementById("formularioReserva").style.display = "none";
+                            cargarConsumosMesa(mesaSeleccionada); // Cargar consumos de la mesa seleccionada
+                        }
+                    });
+
+                    const label = document.createElement("label");
+                    label.textContent = `${mesa.nombre_mesa} (Capacidad: ${mesa.capacidad}, Ocupado: ${mesa.ocupado})`;
+                    label.appendChild(radio);
+
+                    const listItem = document.createElement("li");
+                    listItem.appendChild(label);
+                    listaMesas.appendChild(listItem);
+                });
+
+                mesasDisponibles.appendChild(listaMesas);
+            } catch (error) {
+                console.error("Error al buscar mesas:", error);
+                alert("Ocurrió un error al buscar las mesas");
+            }
+        }
+
+        async function crearDetalle() {
+            event.preventDefault()
+            const idProducto = parseInt(document.getElementById("id_producto").value);
+            const cantidad = document.getElementById("cantidad").value;
+
+            // Crear el objeto de datos para enviar en la solicitud POST
+            const data = {
+                idProducto: parseInt(idProducto),
+                cantidad: cantidad,
+            };
+
+            try {
+                const response = await fetch("http://localhost:3000/api/consumo/detalles", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(data),
+                });
+                const responseData = await response.json();
+                console.log("Respuesta del servidor:", responseData);
+
+                if (responseData.data.idProducto) {
+                    detallesConsumoId = responseData.data.idProducto; // Asignar el ID del detalle creado
+                    console.log("ID del detalle:", detallesConsumoId);
+                } else {
+                    console.error("Error al crear el detalle:", responseData.error);
+                    alert("Ocurrió un error al crear el detalle");
+                }
+
+                return detallesConsumoId;
+            } catch (error) {
+                console.error("Error al crear el detalle:", error);
+                throw error;
+            }
+        }
+
+        async function cargarConsumosMesa(idMesa) {
+            try {
+                const response = await fetch(`http://localhost:3000/api/consumo/mesa/${idMesa}`);
+                const data = await response.json();
+
+                const tablaConsumos = document.getElementById("tablaConsumos");
+                const tbody = tablaConsumos.querySelector("tbody");
+                tbody.innerHTML = "";
+
+                data.data.forEach(consumo => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${consumo.id}</td>
+                        <td>${consumo.fechaCreacion}</td>
+                        <td>${consumo.horaCreacion}</td>
+                        <td>${consumo.total}</td>
+                        <td>${consumo.estado}</td>
+                        <td>
+                          ${consumo.estado !== 'Cerrado' ? `<button onclick="cerrarEstadoConsumo('${consumo.id}')">Cerrar Estado</button>` : ''}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error("Error al cargar los consumos de la mesa:", error);
+                alert("Ocurrió un error al cargar los consumos de la mesa");
+            }
+        }
+
+        async function crearConsumo() {
+            const idMesa = mesaSeleccionada;
+            const idCliente = 1; // Puedes ajustar el ID del cliente según tus necesidades
+            const estado = "abierto";
+            const total = 0;
+
+            try {
+                const response = await fetch("http://localhost:3000/api/consumo/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        idMesa,
+                        idCliente,
+                        estado,
+                        total,
+                        detallesConsumoId,
+                    }),
+                });
+
+                if (response.ok) {
+                    alert("Consumo creado exitosamente");
+                    cargarConsumosMesa(idMesa); // Actualizar la lista de consumos
+                } else {
+                    console.error("Error al crear el consumo:", response.status);
+                    alert("Ocurrió un error al crear el consumo");
+                }
+            } catch (error) {
+                console.error("Error al crear el consumo:", error);
+                alert("Ocurrió un error al crear el consumo");
+            }
+        }
+
+        async function cerrarEstadoConsumo(consumoId) {
+            try {
+                const response = await fetch(`http://localhost:3000/api/consumo/close/${consumoId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        estado: "Cerrado",
+                    }),
+                });
+
+                if (response.ok) {
+                    alert("Estado del consumo cerrado exitosamente");
+                    cargarConsumosMesa(mesaSeleccionada); // Actualizar la lista de consumos
+                } else {
+                    console.error("Error al cerrar el estado del consumo:", response.status);
+                    alert("Ocurrió un error al cerrar el estado del consumo");
+                }
+            } catch (error) {
+                console.error("Error al cerrar el estado del consumo:", error);
+                alert("Ocurrió un error al cerrar el estado del consumo");
+            }
+        }
+        async function generarPDF(consumoId) {
+    try {
+        const response = await fetch(`http://localhost:3000/api/consumo/generate-pdf/${consumoId}`);
+        const data = await response.json();
+        
+        // Manejar la respuesta del servidor (por ejemplo, descargar el PDF)
+
+    } catch (error) {
+        console.error("Error al generar el PDF:", error);
+        alert("Ocurrió un error al generar el PDF");
+    }
+}
+
+        cargarRestaurantes();
+        const reservaForm = document.getElementById("reservaForm");
+        reservaForm.addEventListener("submit", crearDetalle);
+    </script>
+</body>
+</html>

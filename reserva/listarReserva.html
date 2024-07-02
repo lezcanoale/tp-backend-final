@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Listado de Reservas</title>
+</head>
+<body>
+  <h1>Listado de Reservas</h1>
+  <form id="filterForm">
+    <label for="restaurantId">ID del Restaurante:</label>
+    <input type="number" id="restaurantId" name="restaurantId" required>
+    <br>
+    <label for="date">Fecha:</label>
+    <input type="date" id="date" name="date" required>
+    <br>
+    <button type="submit">Filtrar</button>
+  </form>
+
+  <h2>Reservas:</h2>
+  <ul id="reservasList"></ul>
+
+  <script>
+    // Función para realizar la solicitud GET a la API
+    function obtenerReservas() {
+      fetch('http://localhost:3000/api/reserva/')
+        .then(response => response.json())
+        .then(reservas => {
+          // Almacenar los datos obtenidos en una variable reservas en el ámbito global
+          window.reservas = reservas;
+        })
+        .catch(error => console.error('Error al obtener las reservas:', error));
+    }
+
+    // Función para mostrar las reservas filtradas y ordenadas por rango horario
+    function mostrarReservasFiltradas() {
+      // Obtener el ID del restaurante y la fecha del formulario
+      var restaurantId = document.getElementById('restaurantId').value;
+      var date = document.getElementById('date').value;
+
+      // Filtrar las reservas en base al ID del restaurante y la fecha
+      var reservasFiltradas = window.reservas.filter(function(reserva) {
+        return reserva.id_restaurante == restaurantId && reserva.fecha.includes(date);
+      });
+
+      // Ordenar las reservas por rango horario en orden creciente
+      reservasFiltradas.sort(function(a, b) {
+        var rangoA = a.rangos_de_hora[0].split('-')[0];
+        var rangoB = b.rangos_de_hora[0].split('-')[0];
+        return rangoA.localeCompare(rangoB);
+      });
+
+// Limpiar la lista de reservas
+reservasList.innerHTML = '';
+
+// Mostrar cada reserva filtrada y ordenada en la lista
+reservasFiltradas.forEach(function(reserva) {
+  var listItem = document.createElement('li');
+  listItem.innerHTML = `
+    <strong>ID_Reserva:</strong> ${reserva.id}<br>
+    <strong>ID_Mesa:</strong> ${reserva.id_mesa}<br>
+    <strong>ID_Cliente:</strong> ${reserva.id_cliente}<br>
+    <strong>Fecha:</strong> ${reserva.fecha}<br>
+    <strong>Rango Horario:</strong> ${reserva.rangos_de_hora[0]}<br>
+    <hr>
+  `;
+  reservasList.appendChild(listItem);
+});
+    }
+
+    // Escuchar el evento de envío del formulario
+    document.getElementById('filterForm').addEventListener('submit', function(event) {
+      event.preventDefault();
+      mostrarReservasFiltradas();
+    });
+
+    // Obtener las reservas al cargar la página
+    obtenerReservas();
+  </script>
+</body>
+</html>
